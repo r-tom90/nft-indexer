@@ -9,39 +9,72 @@ import {
   SimpleGrid,
   Text,
 } from "@chakra-ui/react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Alchemy, Network } from "alchemy-sdk";
+
 import { useState } from "react";
-import WalletCard from "./components/WalletCard";
+
+import { useAccount } from "wagmi";
 
 function App() {
+  // Defining state variables using useState hook
   const [userAddress, setUserAddress] = useState("");
   const [results, setResults] = useState([]);
   const [hasQueried, setHasQueried] = useState(false);
   const [tokenDataObjects, setTokenDataObjects] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  // Retrieving connected wallet address, status and connection details using useAccount hook
+  const { address, status, isConnected } = useAccount();
+
+  // An async function that retrieves all ERC-721 tokens for a given owner
   async function getNFTsForOwner() {
-    const config = {
-      apiKey: import.meta.env.VITE_ALCHEMY_API_KEY,
-      network: Network.ETH_MAINNET,
-    };
+    try {
+      // Configuring the Alchemy API with the API key and network type
+      const config = {
+        apiKey: import.meta.env.VITE_ALCHEMY_API_KEY,
+        network: Network.ETH_MAINNET,
+      };
 
-    const alchemy = new Alchemy(config);
-    const data = await alchemy.nft.getNftsForOwner(userAddress);
-    setResults(data);
+      // Creating an instance of Alchemy client
+      const alchemy = new Alchemy(config);
 
-    const tokenDataPromises = [];
+      // Retrieving all ERC-721 tokens for a given owner
+      const data = await alchemy.nft.getNftsForOwner(address || userAddress);
+      console.log("getNftsForOwner", data);
 
-    for (let i = 0; i < data.ownedNfts.length; i++) {
-      const tokenData = alchemy.nft.getNftMetadata(
-        data.ownedNfts[i].contract.address,
-        data.ownedNfts[i].tokenId
-      );
-      tokenDataPromises.push(tokenData);
+      // Updating the state variable with the retrieved data
+      setResults(data);
+
+      // Retrieving metadata for each ERC-721 token using Promise.all() method
+      const tokenDataPromises = [];
+
+      for (let i = 0; i < data.ownedNfts.length; i++) {
+        const tokenData = alchemy.nft.getNftMetadata(
+          data.ownedNfts[i].contract.address,
+          data.ownedNfts[i].tokenId
+        );
+        console.log("getNftMetadata", tokenData);
+        tokenDataPromises.push(tokenData);
+      }
+
+      // Updating the state variable with the retrieved metadata
+      setTokenDataObjects(await Promise.all(tokenDataPromises));
+      setHasQueried(true);
+    } catch (error) {
+      // Logging the error to the console
+      console.error(error);
+    } finally {
+      // Setting the loading state variable to false
+      setLoading(false);
     }
-
-    setTokenDataObjects(await Promise.all(tokenDataPromises));
-    setHasQueried(true);
   }
+
+  // A function that updates the userAddress state variable with the input value
+  const handleInputChange = ({ target }) => {
+    setUserAddress(target.value);
+  };
+
   return (
     <Box w="100vw">
       <Center>
@@ -50,7 +83,8 @@ function App() {
           justifyContent="center"
           flexDirection={"column"}
         >
-          <WalletCard />
+          <ConnectButton />
+
           <Heading mb={0} fontSize={36}>
             NFT Indexer 🖼
           </Heading>
@@ -67,7 +101,8 @@ function App() {
       >
         <Heading mt={42}>Get all the ERC-721 tokens of this address:</Heading>
         <Input
-          onChange={(e) => setUserAddress(e.target.value)}
+          value={address ? address : userAddress}
+          onChange={handleInputChange}
           color="black"
           w="600px"
           textAlign="center"
@@ -75,8 +110,14 @@ function App() {
           bgColor="white"
           fontSize={24}
         />
-        <Button fontSize={20} onClick={getNFTsForOwner} mt={36} bgColor="blue">
-          Fetch NFTs
+        <Button
+          fontSize={20}
+          onClick={getNFTsForOwner}
+          mt={36}
+          bgColor="#1f1f1f"
+          disabled={loading}
+        >
+          {loading ? "Loading..." : " Fetch NFTs"}
         </Button>
 
         <Heading my={36}>Here are your NFTs:</Heading>
@@ -88,10 +129,16 @@ function App() {
                 <Flex
                   flexDir={"column"}
                   color="white"
-                  bg="blue"
+                  bg="#1f1f1f"
                   w={"20vw"}
-                  key={e.id}
+                  key={i}
                 >
+                  <Box>
+                    <b>Collection:</b>{" "}
+                    {tokenDataObjects[i].contract.name?.length === 0
+                      ? "No Name"
+                      : tokenDataObjects[i].contract.name}
+                  </Box>
                   <Box>
                     <b>Name:</b>{" "}
                     {tokenDataObjects[i].title?.length === 0
